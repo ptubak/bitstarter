@@ -24,8 +24,10 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var rest = require('restler');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+var URL_DEFAULT = "http://pure-headland-9300.herokuapp.com/";
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
@@ -36,9 +38,29 @@ var assertFileExists = function(infile) {
     return instr;
 };
 
+var assertCorrectURL = function(url) {
+        var strRegex = "^((https|http|ftp|rtsp|mms)?://)"
+            + "?(([0-9a-z_!~*'().&=+$%-]+: )?[0-9a-z_!~*'().&=+$%-]+@)?" //ftp?user@
+            + "(([0-9]{1,3}\.){3}[0-9]{1,3}" // IP???URL- 199.194.52.184
+            + "|" // ??IP?DOMAIN????
+            + "([0-9a-z_!~*'()-]+\.)*" // ??- www.
+            + "([0-9a-z][0-9a-z-]{0,61})?[0-9a-z]\." // ????
+            + "[a-z]{2,6})" // first level domain- .com or .museum
+            + "(:[0-9]{1,4})?" // ??- :80
+            + "((/?)|" // a slash isn't required if there is no file name
+            + "(/[0-9a-z_!~*'().;?:@&=+$,%#-]+)+/?)$";
+         var re=new RegExp(strRegex);
+         return re.test(url);
+};
+
+
 var cheerioHtmlFile = function(htmlfile) {
     return cheerio.load(fs.readFileSync(htmlfile));
 };
+
+var cheerioHtmlURL = function(htmlurl) {
+    return cheerio.load(rest.get(htmlurl));
+}; 
 
 var loadChecks = function(checksfile) {
     return JSON.parse(fs.readFileSync(checksfile));
@@ -55,6 +77,16 @@ var checkHtmlFile = function(htmlfile, checksfile) {
     return out;
 };
 
+var checkURL = function(htmlurl, checksfile) {                                                                              
+    rest.get(htmlurl, {
+    	}).on('complete', function (data) {
+      		fs.writeFile('./test.html', data, function(err, data) {
+      	});
+	 return checkHtmlFile ('./test.html', checksfile);
+    }); 
+   // return checkHtmlFile ('./test.html', checksfile);
+}; 
+
 var clone = function(fn) {
     // Workaround for commander.js issue.
     // http://stackoverflow.com/a/6772648
@@ -65,8 +97,15 @@ if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+	.option('-u, --url <url>', 'URL to html to be checked', URL_DEFAULT)
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
+    var checkJson = null;
+    if (program.file) checkJson = checkHtmlFile(program.file, program.checks);
+    if (program.url) {
+	checkURL(program.url, program.checks);
+	checkJson = checkHtmlFile('./test.html', program.checks);
+	//console.log('I was here');
+    }
     var outJson = JSON.stringify(checkJson, null, 4);
     console.log(outJson);
 } else {
